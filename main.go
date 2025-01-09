@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"gb-emu/cart"
 	"os"
 )
 
@@ -12,6 +13,7 @@ func main() {
 	}
 
 	cartFile := os.Args[1]
+	ctx := cart.CartContext{}
 
 	if ctx.CartLoad(cartFile) {
 		fmt.Println("Cartridge loaded successfully.")

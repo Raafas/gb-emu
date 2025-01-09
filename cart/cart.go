@@ -1,35 +1,32 @@
 package cart
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
-	"unsafe"
 )
 
-type U8 uint8
-type U16 uint16
-type U32 uint32
-
 type RomHeader struct {
-	Entry          [4]U8
-	Logo           [0x30]U8
+	Entry          [4]uint8
+	Logo           [0x30]uint8
 	Title          [16]byte
-	NewLicCode     U16
-	SgbFlag        U8
-	Type           U8
-	RomSize        U8
-	RamSize        U8
-	DestCode       U8
-	LicCode        U8
-	Version        U8
-	Checksum       U8
-	GlobalChecksum U16
+	NewLicCode     uint16
+	SgbFlag        uint8
+	Type           uint8
+	RomSize        uint8
+	RamSize        uint8
+	DestCode       uint8
+	LicCode        uint8
+	Version        uint8
+	Checksum       uint8
+	GlobalChecksum uint16
 }
 
 type CartContext struct {
 	Filename string
-	RomSize  U32
-	RomData  []U8
+	RomSize  uint32
+	RomData  []uint8
 	Header   *RomHeader
 }
 
@@ -73,7 +70,7 @@ var romTypes = []string{
 	"MBC7+SENSOR+RUMBLE+RAM+BATTERY",
 }
 
-var licCodes = map[U8]string{
+var licCodes = map[uint8]string{
 	0x00: "None",
 	0x01: "Nintendo R&D1",
 	0x08: "Capcom",
@@ -160,31 +157,35 @@ func (ctx *CartContext) CartLoad(cart string) bool {
 		return false
 	}
 
-	ctx.RomSize = U32(len(data))
-	ctx.RomData = make([]U8, ctx.RomSize)
-	for i, b := range data {
-		ctx.RomData[i] = U8(b)
+	ctx.RomSize = uint32(len(data))
+	ctx.RomData = make([]uint8, ctx.RomSize)
+	copy(ctx.RomData, data)
+
+	ctx.Header = new(RomHeader)
+	err = binary.Read(bytes.NewReader(ctx.RomData[0x100:]), binary.LittleEndian, ctx.Header)
+	if err != nil {
+		fmt.Printf("Failed to read ROM header: %v\n", err)
+		return false
 	}
 
-	ctx.Header = (*RomHeader)(unsafe.Pointer(&ctx.RomData[0x100]))
-	ctx.Header.Title[15] = 0
+	ctx.Header.Title[15] = 0 // Garantir que o título seja uma string válida.
 
 	fmt.Printf("Cartridge Loaded:\n")
 	fmt.Printf("\t Title    : %s\n", string(ctx.Header.Title[:]))
-	fmt.Printf("\t Type     : %2.2X (%s)\n", ctx.Header.Type, cartTypeName())
+	// fmt.Printf("\t Type     : %2.2X (%s)\n", ctx.Header.Type, cartTypeName())
 	fmt.Printf("\t ROM Size : %d KB\n", 32<<ctx.Header.RomSize)
 	fmt.Printf("\t RAM Size : %2.2X\n", ctx.Header.RamSize)
-	fmt.Printf("\t LIC Code : %2.2X (%s)\n", ctx.Header.LicCode, cartLicName())
+	// fmt.Printf("\t LIC Code : %2.2X (%s)\n", ctx.Header.LicCode, cartLicName())
 	fmt.Printf("\t ROM Vers : %2.2X\n", ctx.Header.Version)
 
-	var checksum U16
+	var checksum uint16
 	for i := 0x0134; i <= 0x014C; i++ {
-		checksum = checksum - U16(ctx.RomData[i]) - 1 // Converte ctx.RomData[i] para U16
+		checksum -= uint16(ctx.RomData[i]) + 1
 	}
 
-	var checksumStatus = (checksum & 0xFF) == 0
+	checksumStatus := (checksum & 0xFF) == 0
 
-	if checksumStatus == true {
+	if checksumStatus {
 		fmt.Printf("\t Checksum : %2.2X (%s)\n", ctx.Header.Checksum, "PASSED")
 	} else {
 		fmt.Printf("\t Checksum : %2.2X (%s)\n", ctx.Header.Checksum, "FAILED")
